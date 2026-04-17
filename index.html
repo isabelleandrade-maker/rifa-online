@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Rifa Online</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, sans-serif; background: #f9f9f7; color: #1a1a18; min-height: 100vh; }
+    .wrap { max-width: 720px; margin: 0 auto; padding: 2rem 1rem; }
+    h2 { font-size: 20px; font-weight: 500; margin: 0 0 4px; }
+    .sub { font-size: 13px; color: #888780; margin: 0 0 1rem; }
+    .live-badge { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #1D9E75; background: #e6f7f2; border-radius: 20px; padding: 3px 10px; margin-bottom: 1rem; }
+    .live-dot { width: 8px; height: 8px; background: #1D9E75; border-radius: 50%; animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.3} }
+    .stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; margin-bottom: 1.5rem; }
+    .stat { background: #f1efe8; border-radius: 8px; padding: 12px; }
+    .stat-label { font-size: 12px; color: #888780; margin-bottom: 4px; }
+    .stat-val { font-size: 22px; font-weight: 500; }
+    .legend { display: flex; gap: 16px; margin-bottom: 1rem; flex-wrap: wrap; }
+    .leg { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #888780; }
+    .dot { width: 14px; height: 14px; border-radius: 3px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(44px,1fr)); gap: 6px; margin-bottom: 1.5rem; }
+    .num-btn {
+      aspect-ratio: 1; border-radius: 8px; border: 0.5px solid #b4b2a9;
+      background: #fff; font-size: 13px; font-weight: 500; cursor: pointer;
+      color: #1a1a18; transition: background .15s, color .15s;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .num-btn.sold { background: #1D9E75; border-color: #0F6E56; color: #fff; }
+    .num-btn.sold:hover { background: #c0392b; border-color: #922b21; }
+    .num-btn.selected { background: #378ADD; border-color: #185FA5; color: #fff; }
+    .num-btn:hover:not(.sold):not(.selected) { background: #f1efe8; }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: .5rem; }
+    .btn { padding: 8px 18px; border-radius: 8px; border: 0.5px solid #b4b2a9; background: #fff; font-size: 14px; cursor: pointer; color: #1a1a18; }
+    .btn:hover { background: #f1efe8; }
+    .btn.primary { background: #378ADD; border-color: #185FA5; color: #fff; }
+    .btn.primary:hover { background: #185FA5; }
+    .btn.danger { background: #fcebeb; border-color: #f09595; color: #a32d2d; }
+    .input-row { display: flex; gap: 8px; margin-bottom: 1rem; align-items: center; flex-wrap: wrap; }
+    input[type=number], input[type=text] { padding: 6px 10px; border: 0.5px solid #b4b2a9; border-radius: 8px; font-size: 14px; background: #fff; color: #1a1a18; }
+    input[type=number] { width: 90px; }
+    input[type=text] { width: 220px; }
+    .toast { font-size: 13px; color: #0F6E56; min-height: 20px; }
+    .admin-area { border-top: 0.5px solid #d3d1c7; padding-top: 1rem; margin-top: 1rem; }
+    .admin-label { font-size: 12px; color: #888780; margin-bottom: 8px; }
+    label { font-size: 13px; color: #888780; }
+    #status-msg { font-size: 12px; color: #888780; margin-bottom: 8px; min-height: 18px; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h2 id="rifa-title">🎟️ Rifa Online</h2>
+  <p class="sub">Clique em um número disponível para selecionar. Clique em um número verde para cancelar a venda.</p>
+  <div class="live-badge"><span class="live-dot"></span> Atualização em tempo real</div>
+
+  <div class="stats">
+    <div class="stat"><div class="stat-label">Total de números</div><div class="stat-val" id="stat-total">—</div></div>
+    <div class="stat"><div class="stat-label">Vendidos</div><div class="stat-val" id="stat-sold" style="color:#1D9E75">—</div></div>
+    <div class="stat"><div class="stat-label">Disponíveis</div><div class="stat-val" id="stat-avail">—</div></div>
+  </div>
+
+  <div class="legend">
+    <div class="leg"><div class="dot" style="background:#1D9E75"></div> Vendido (clique p/ cancelar)</div>
+    <div class="leg"><div class="dot" style="background:#378ADD"></div> Selecionado</div>
+    <div class="leg"><div class="dot" style="border:0.5px solid #b4b2a9;background:#fff"></div> Disponível</div>
+  </div>
+
+  <div id="status-msg">Carregando...</div>
+  <div class="grid" id="num-grid"></div>
+
+  <div class="actions" id="action-area" style="display:none">
+    <span id="sel-label" style="font-size:13px;color:#888780"></span>
+    <button class="btn primary" id="btn-confirm">Confirmar venda</button>
+    <button class="btn" id="btn-cancel">Cancelar seleção</button>
+  </div>
+
+  <p class="toast" id="toast"></p>
+
+  <div class="admin-area">
+    <div class="admin-label">Painel do organizador</div>
+    <div class="input-row">
+      <label>Total de números:</label>
+      <input type="number" id="total-input" min="10" max="1000" value="100" />
+      <button class="btn" id="btn-total">Atualizar</button>
+    </div>
+    <div class="input-row">
+      <label>Nome da rifa:</label>
+      <input type="text" id="name-input" placeholder="Ex: Rifa da bicicleta" />
+      <button class="btn" id="btn-name">Salvar</button>
+    </div>
+    <div class="input-row">
+      <button class="btn danger" id="btn-reset">Zerar vendas</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  var BASE = "https://rifa-6fddc-default-rtdb.firebaseio.com/rifa";
+  var state = { total: 100, sold: {}, name: "Rifa Online" };
+  var selected = [];
+  var polling;
+
+  function apiGet() {
+    return fetch(BASE + ".json").then(function(r){ return r.json(); });
+  }
+  function apiSet(data) {
+    return fetch(BASE + ".json", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data)
+    }).then(function(r){ return r.json(); });
+  }
+  function apiPatch(data) {
+    return fetch(BASE + ".json", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data)
+    }).then(function(r){ return r.json(); });
+  }
+
+  function loadState() {
+    apiGet().then(function(data) {
+      if (data && data.total) {
+        state.total = data.total;
+        state.sold  = data.sold  || {};
+        state.name  = data.name  || "Rifa Online";
+      } else {
+        // banco vazio — inicializa
+        apiSet(state);
+      }
+      document.getElementById("status-msg").textContent = "";
+      render();
+      startPolling();
+    }).catch(function(e) {
+      document.getElementById("status-msg").textContent = "Erro ao conectar: " + e.message;
+      // mostra os números mesmo offline
+      document.getElementById("status-msg").style.color = "#c0392b";
+      render();
+    });
+  }
+
+  function startPolling() {
+    clearInterval(polling);
+    polling = setInterval(function() {
+      apiGet().then(function(data) {
+        if (!data) return;
+        state.total = data.total || state.total;
+        state.sold  = data.sold  || {};
+        state.name  = data.name  || state.name;
+        render();
+      });
+    }, 3000);
+  }
+
+  function saveState() {
+    return apiSet({ total: state.total, sold: state.sold, name: state.name });
+  }
+
+  function isSold(n)     { return !!state.sold[n]; }
+  function isSelected(n) { return selected.indexOf(n) !== -1; }
+
+  function render() {
+    document.getElementById("rifa-title").textContent = "🎟️ " + state.name;
+    var soldCount = Object.keys(state.sold).length;
+    document.getElementById("stat-total").textContent = state.total;
+    document.getElementById("stat-sold").textContent  = soldCount;
+    document.getElementById("stat-avail").textContent = state.total - soldCount;
+    document.getElementById("total-input").value = state.total;
+    document.getElementById("name-input").value  = state.name;
+
+    var grid = document.getElementById("num-grid");
+    grid.innerHTML = "";
+    for (var i = 1; i <= state.total; i++) {
+      (function(n) {
+        var btn = document.createElement("button");
+        btn.textContent = n;
+        btn.className = "num-btn";
+        if (isSold(n)) {
+          btn.classList.add("sold");
+          btn.title = "Vendido — clique para cancelar";
+          btn.addEventListener("click", function(){ cancelSale(n); });
+        } else if (isSelected(n)) {
+          btn.classList.add("selected");
+          btn.addEventListener("click", function(){ toggleSelect(n); });
+        } else {
+          btn.addEventListener("click", function(){ toggleSelect(n); });
+        }
+        grid.appendChild(btn);
+      })(i);
+    }
+
+    var area = document.getElementById("action-area");
+    if (selected.length > 0) {
+      area.style.display = "flex";
+      var nums = selected.slice().sort(function(a,b){return a-b;}).join(", ");
+      document.getElementById("sel-label").textContent =
+        selected.length === 1
+          ? "Número " + nums + " selecionado"
+          : selected.length + " números: " + nums;
+    } else {
+      area.style.display = "none";
+    }
+  }
+
+  function toggleSelect(n) {
+    var idx = selected.indexOf(n);
+    if (idx === -1) selected.push(n);
+    else selected.splice(idx, 1);
+    render();
+  }
+
+  function cancelSale(n) {
+    delete state.sold[n];
+    render();
+    saveState().then(function(){ toast("Venda do número " + n + " cancelada."); });
+  }
+
+  document.getElementById("btn-confirm").addEventListener("click", function() {
+    selected.forEach(function(n){ state.sold[n] = true; });
+    var count = selected.length;
+    selected = [];
+    render();
+    saveState().then(function(){
+      toast(count + " número" + (count>1?"s":"") + " marcado" + (count>1?"s":"") + " como vendido" + (count>1?"s":"") + "!");
+    });
+  });
+
+  document.getElementById("btn-cancel").addEventListener("click", function() {
+    selected = [];
+    render();
+  });
+
+  document.getElementById("btn-total").addEventListener("click", function() {
+    var v = parseInt(document.getElementById("total-input").value);
+    if (v >= 10 && v <= 1000) {
+      var newSold = {};
+      Object.keys(state.sold).forEach(function(k){ if (parseInt(k) <= v) newSold[k] = true; });
+      state.total = v;
+      state.sold  = newSold;
+      selected = selected.filter(function(n){ return n <= v; });
+      render();
+      saveState().then(function(){ toast("Total atualizado!"); });
+    }
+  });
+
+  document.getElementById("btn-name").addEventListener("click", function() {
+    var v = document.getElementById("name-input").value.trim();
+    if (v) { state.name = v; render(); saveState().then(function(){ toast("Nome salvo!"); }); }
+  });
+
+  document.getElementById("btn-reset").addEventListener("click", function() {
+    state.sold = {};
+    selected = [];
+    render();
+    saveState().then(function(){ toast("Todas as vendas foram zeradas."); });
+  });
+
+  function toast(msg) {
+    var el = document.getElementById("toast");
+    el.textContent = msg;
+    setTimeout(function(){ el.textContent = ""; }, 3000);
+  }
+
+  loadState();
+</script>
+</body>
+</html>
