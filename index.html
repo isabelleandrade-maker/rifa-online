@@ -26,6 +26,7 @@
       background: #fff; font-size: 13px; font-weight: 500; cursor: pointer;
       color: #1a1a18; transition: background .15s, color .15s;
       display: flex; align-items: center; justify-content: center;
+      position: relative;
     }
     .num-btn.sold { background: #1D9E75; border-color: #0F6E56; color: #fff; }
     .num-btn.sold:hover { background: #c0392b; border-color: #922b21; }
@@ -46,12 +47,63 @@
     .admin-label { font-size: 12px; color: #888780; margin-bottom: 8px; }
     label { font-size: 13px; color: #888780; }
     #status-msg { font-size: 12px; color: #888780; margin-bottom: 8px; min-height: 18px; }
+
+    /* Modal */
+    .modal-bg { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:100; align-items:center; justify-content:center; }
+    .modal-bg.open { display:flex; }
+    .modal { background:#fff; border-radius: 12px; padding: 1.5rem; width: 100%; max-width: 360px; box-shadow: 0 8px 32px rgba(0,0,0,0.15); }
+    .modal h3 { margin: 0 0 4px; font-size: 16px; font-weight: 600; }
+    .modal p { margin: 0 0 1rem; font-size: 13px; color: #888780; }
+    .modal input { width: 100%; padding: 8px 12px; border: 0.5px solid #b4b2a9; border-radius: 8px; font-size: 15px; margin-bottom: 1rem; }
+    .modal-btns { display: flex; gap: 8px; justify-content: flex-end; }
+
+    /* Tooltip com nome */
+    .num-btn .tip {
+      display: none; position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%);
+      background: #1a1a18; color: #fff; font-size: 10px; white-space: nowrap;
+      padding: 3px 7px; border-radius: 5px; pointer-events: none; z-index: 10;
+    }
+    .num-btn:hover .tip { display: block; }
+
+    /* Lista de vendidos */
+    .sold-list { margin-top: 1rem; }
+    .sold-list-title { font-size: 13px; color: #888780; margin-bottom: 8px; }
+    .sold-item { display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; background: #f1efe8; border-radius: 8px; margin-bottom: 4px; font-size: 13px; }
+    .sold-item span { color: #1D9E75; font-weight: 600; margin-right: 8px; }
+
+    @media (prefers-color-scheme: dark) {
+      body { background: #1a1a18; color: #f1efe8; }
+      .stat { background: #2c2c2a; }
+      .num-btn { background: #2c2c2a; border-color: #5f5e5a; color: #f1efe8; }
+      .num-btn:hover:not(.sold):not(.selected) { background: #444441; }
+      .btn { background: #2c2c2a; border-color: #5f5e5a; color: #f1efe8; }
+      .btn:hover { background: #444441; }
+      .admin-area { border-color: #444441; }
+      input[type=number], input[type=text] { background: #2c2c2a; border-color: #5f5e5a; color: #f1efe8; }
+      .modal { background: #2c2c2a; }
+      .modal input { background: #1a1a18; border-color: #5f5e5a; color: #f1efe8; }
+      .sold-item { background: #2c2c2a; }
+    }
   </style>
 </head>
 <body>
+
+<!-- Modal de nome -->
+<div class="modal-bg" id="modal-bg">
+  <div class="modal">
+    <h3>Confirmar compra</h3>
+    <p id="modal-desc">Número(s) selecionado(s)</p>
+    <input type="text" id="modal-name" placeholder="Nome do comprador" autocomplete="off" />
+    <div class="modal-btns">
+      <button class="btn" id="modal-cancel">Cancelar</button>
+      <button class="btn primary" id="modal-ok">Confirmar</button>
+    </div>
+  </div>
+</div>
+
 <div class="wrap">
   <h2 id="rifa-title">🎟️ Rifa Online</h2>
-  <p class="sub">Clique em um número disponível para selecionar. Clique em um número verde para cancelar a venda.</p>
+  <p class="sub">Clique em um número para selecioná-lo. Passe o mouse sobre um número vendido para ver o nome.</p>
   <div class="live-badge"><span class="live-dot"></span> Atualização em tempo real</div>
 
   <div class="stats">
@@ -61,7 +113,7 @@
   </div>
 
   <div class="legend">
-    <div class="leg"><div class="dot" style="background:#1D9E75"></div> Vendido (clique p/ cancelar)</div>
+    <div class="leg"><div class="dot" style="background:#1D9E75"></div> Vendido</div>
     <div class="leg"><div class="dot" style="background:#378ADD"></div> Selecionado</div>
     <div class="leg"><div class="dot" style="border:0.5px solid #b4b2a9;background:#fff"></div> Disponível</div>
   </div>
@@ -72,10 +124,16 @@
   <div class="actions" id="action-area" style="display:none">
     <span id="sel-label" style="font-size:13px;color:#888780"></span>
     <button class="btn primary" id="btn-confirm">Confirmar venda</button>
-    <button class="btn" id="btn-cancel">Cancelar seleção</button>
+    <button class="btn" id="btn-cancel-sel">Cancelar seleção</button>
   </div>
 
   <p class="toast" id="toast"></p>
+
+  <!-- Lista de vendidos -->
+  <div class="sold-list">
+    <div class="sold-list-title">📋 Lista de compradores</div>
+    <div id="sold-list-body"></div>
+  </div>
 
   <div class="admin-area">
     <div class="admin-label">Painel do organizador</div>
@@ -97,6 +155,7 @@
 
 <script>
   var BASE = "https://rifa-6fddc-default-rtdb.firebaseio.com/rifa";
+  // sold agora é { "1": "Isabelle", "5": "João", ... }
   var state = { total: 100, sold: {}, name: "Rifa Online" };
   var selected = [];
   var polling;
@@ -111,13 +170,6 @@
       body: JSON.stringify(data)
     }).then(function(r){ return r.json(); });
   }
-  function apiPatch(data) {
-    return fetch(BASE + ".json", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data)
-    }).then(function(r){ return r.json(); });
-  }
 
   function loadState() {
     apiGet().then(function(data) {
@@ -126,16 +178,15 @@
         state.sold  = data.sold  || {};
         state.name  = data.name  || "Rifa Online";
       } else {
-        // banco vazio — inicializa
         apiSet(state);
       }
       document.getElementById("status-msg").textContent = "";
       render();
       startPolling();
-    }).catch(function(e) {
-      document.getElementById("status-msg").textContent = "Erro ao conectar: " + e.message;
-      // mostra os números mesmo offline
-      document.getElementById("status-msg").style.color = "#c0392b";
+    }).catch(function() {
+      var el = document.getElementById("status-msg");
+      el.textContent = "Modo offline — dados não serão salvos.";
+      el.style.color = "#c0392b";
       render();
     });
   }
@@ -157,8 +208,9 @@
     return apiSet({ total: state.total, sold: state.sold, name: state.name });
   }
 
-  function isSold(n)     { return !!state.sold[n]; }
+  function isSold(n)     { return state.sold[n] !== undefined; }
   function isSelected(n) { return selected.indexOf(n) !== -1; }
+  function soldName(n)   { return state.sold[n] || ""; }
 
   function render() {
     document.getElementById("rifa-title").textContent = "🎟️ " + state.name;
@@ -174,16 +226,18 @@
     for (var i = 1; i <= state.total; i++) {
       (function(n) {
         var btn = document.createElement("button");
-        btn.textContent = n;
         btn.className = "num-btn";
         if (isSold(n)) {
           btn.classList.add("sold");
-          btn.title = "Vendido — clique para cancelar";
+          btn.innerHTML = n + '<span class="tip">' + soldName(n) + '</span>';
+          btn.title = soldName(n);
           btn.addEventListener("click", function(){ cancelSale(n); });
         } else if (isSelected(n)) {
           btn.classList.add("selected");
+          btn.textContent = n;
           btn.addEventListener("click", function(){ toggleSelect(n); });
         } else {
+          btn.textContent = n;
           btn.addEventListener("click", function(){ toggleSelect(n); });
         }
         grid.appendChild(btn);
@@ -195,11 +249,21 @@
       area.style.display = "flex";
       var nums = selected.slice().sort(function(a,b){return a-b;}).join(", ");
       document.getElementById("sel-label").textContent =
-        selected.length === 1
-          ? "Número " + nums + " selecionado"
-          : selected.length + " números: " + nums;
+        selected.length === 1 ? "Número " + nums + " selecionado" : selected.length + " números: " + nums;
     } else {
       area.style.display = "none";
+    }
+
+    // lista de compradores
+    var listEl = document.getElementById("sold-list-body");
+    var keys = Object.keys(state.sold).map(Number).sort(function(a,b){return a-b;});
+    if (keys.length === 0) {
+      listEl.innerHTML = '<div style="font-size:13px;color:#888780">Nenhum número vendido ainda.</div>';
+    } else {
+      listEl.innerHTML = keys.map(function(n) {
+        return '<div class="sold-item"><div><span>#' + n + '</span>' + (state.sold[n]||"—") + '</div>'
+          + '<button class="btn" style="padding:3px 10px;font-size:12px" onclick="cancelSale('+n+')">Cancelar</button></div>';
+      }).join("");
     }
   }
 
@@ -216,17 +280,40 @@
     saveState().then(function(){ toast("Venda do número " + n + " cancelada."); });
   }
 
+  // Abre modal ao confirmar
   document.getElementById("btn-confirm").addEventListener("click", function() {
-    selected.forEach(function(n){ state.sold[n] = true; });
+    if (selected.length === 0) return;
+    var nums = selected.slice().sort(function(a,b){return a-b;}).join(", ");
+    document.getElementById("modal-desc").textContent =
+      "Número" + (selected.length > 1 ? "s" : "") + ": " + nums;
+    document.getElementById("modal-name").value = "";
+    document.getElementById("modal-bg").classList.add("open");
+    setTimeout(function(){ document.getElementById("modal-name").focus(); }, 100);
+  });
+
+  document.getElementById("modal-cancel").addEventListener("click", function() {
+    document.getElementById("modal-bg").classList.remove("open");
+  });
+
+  document.getElementById("modal-ok").addEventListener("click", function() {
+    var name = document.getElementById("modal-name").value.trim();
+    if (!name) { document.getElementById("modal-name").focus(); return; }
+    selected.forEach(function(n){ state.sold[n] = name; });
     var count = selected.length;
     selected = [];
+    document.getElementById("modal-bg").classList.remove("open");
     render();
     saveState().then(function(){
-      toast(count + " número" + (count>1?"s":"") + " marcado" + (count>1?"s":"") + " como vendido" + (count>1?"s":"") + "!");
+      toast(count + " número" + (count>1?"s":"") + " registrado" + (count>1?"s":"") + " para " + name + "!");
     });
   });
 
-  document.getElementById("btn-cancel").addEventListener("click", function() {
+  // Confirma com Enter no modal
+  document.getElementById("modal-name").addEventListener("keydown", function(e) {
+    if (e.key === "Enter") document.getElementById("modal-ok").click();
+  });
+
+  document.getElementById("btn-cancel-sel").addEventListener("click", function() {
     selected = [];
     render();
   });
@@ -235,7 +322,7 @@
     var v = parseInt(document.getElementById("total-input").value);
     if (v >= 10 && v <= 1000) {
       var newSold = {};
-      Object.keys(state.sold).forEach(function(k){ if (parseInt(k) <= v) newSold[k] = true; });
+      Object.keys(state.sold).forEach(function(k){ if (parseInt(k) <= v) newSold[k] = state.sold[k]; });
       state.total = v;
       state.sold  = newSold;
       selected = selected.filter(function(n){ return n <= v; });
@@ -250,6 +337,7 @@
   });
 
   document.getElementById("btn-reset").addEventListener("click", function() {
+    if (!confirm("Zerar todas as vendas?")) return;
     state.sold = {};
     selected = [];
     render();
